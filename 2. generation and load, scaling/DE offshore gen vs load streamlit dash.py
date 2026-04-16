@@ -158,7 +158,15 @@ if sample_annual_load <= 0:
     st.error(f"Loaded {data_source} load data for {year}, but the annual load summed to zero. Check the source CSV formatting.")
     st.stop()
 
-load_scale = load_forecast_mwh / sample_annual_load if sample_annual_load > 0 else 1
+# Annualise sample load to account for partial-year data (e.g. 2026 only has 4 months)
+unique_days = df["timestamp"].dt.date.nunique()
+days_in_year = 366 if (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)) else 365
+year_coverage = unique_days / days_in_year
+annualised_sample_load = sample_annual_load / year_coverage if year_coverage > 0 else sample_annual_load
+if year_coverage < 0.95:
+    st.info(f"Note: {year} data covers {year_coverage*100:.0f}% of the year ({unique_days} days). Load scaling has been annualised accordingly.")
+
+load_scale = load_forecast_mwh / annualised_sample_load if annualised_sample_load > 0 else 1
 df["load_scaled"] = df["load_mwh"] * load_scale
 df["load_met"] = df[["gen_scaled", "load_scaled"]].min(axis=1)
 df["surplus"] = (df["gen_scaled"] - df["load_scaled"]).clip(lower=0)
