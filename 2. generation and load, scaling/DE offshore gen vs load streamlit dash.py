@@ -188,7 +188,7 @@ full_load_hours = (total_gen / (target_capacity_gw * 1e3)) if target_capacity_gw
 with st.expander("📊 Annual Summary", expanded=True):
     s1, s2, s3, s4 = st.columns(4)
     s1.metric("Capacity Factor", f"{capacity_factor:.1f} %")
-    s2.metric("Full-Load Hours", f"{full_load_hours:,.0f} h")
+    s2.metric("EquivalentFull-Load Hours", f"{full_load_hours:,.0f} h")
     s3.metric("Total Surplus", f"{total_surplus / 1e6:.2f} TWh")
     s4.metric("Total Unmet Load", f"{(total_load - total_met) / 1e6:.2f} TWh")
 
