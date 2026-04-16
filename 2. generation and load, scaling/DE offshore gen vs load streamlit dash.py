@@ -1,11 +1,21 @@
 import streamlit as st
 import pandas as pd
 import calendar
+import os
+import pathlib
 import plotly.express as px
 import plotly.graph_objects as go
 
-# Base data directory
-DATA_DIR = "C:/Users/IanPe/OneDrive - Universidade de Lisboa/Documents/IST/MEGE/~Thesis Sem 4 26/Germany Data"
+# Base data directory (relative to this script → works on any machine / Streamlit Cloud)
+DATA_DIR = str(pathlib.Path(__file__).resolve().parent.parent / "DATA" / "Germany Data")
+
+# Compact metric styling (reduces oversized default font)
+st.markdown("""
+<style>
+[data-testid="stMetricValue"] > div { font-size: 1.1rem !important; }
+[data-testid="stMetricLabel"] { font-size: 0.75rem !important; }
+</style>
+""", unsafe_allow_html=True)
 
 # Define meteorological seasons (DWD / WMO standard)
 seasons = {
@@ -52,8 +62,8 @@ def load_frauenhofer(year):
 @st.cache_data
 def load_smard_combined():
     """Load entire combined SMARD dataset (cached)"""
-    gen_path = f"{DATA_DIR}/SMARD Actual_generation_202201010000_202604140100_Hour.csv"
-    load_path = f"{DATA_DIR}/SMARD Actual_consumption_202201010000_202604140100_Hour.csv"
+    gen_path = f"{DATA_DIR}/SMARD data/SMARD Actual_generation_202201010000_202604140100_Hour.csv"
+    load_path = f"{DATA_DIR}/SMARD data/SMARD Actual_consumption_202201010000_202604140100_Hour.csv"
 
     gen_df = pd.read_csv(gen_path, sep=';')
     gen_df['timestamp'] = parse_smard_timestamp(gen_df['Start date'])
@@ -164,6 +174,29 @@ col_m1, col_m2, col_m3 = st.columns(3)
 col_m1.metric("Annual load (TWh)", f"{total_load / 1e6:.1f}")
 col_m2.metric("Annual generation (TWh)", f"{total_gen / 1e6:.1f}")
 col_m3.metric("Coverage (%)", f"{coverage_pct:.1f}")
+
+# --- Summary box: annual totals, capacity factors, peak values ---
+hours_in_period = len(df)
+capacity_factor = (total_gen / (target_capacity_gw * 1e3 * hours_in_period) * 100) if (target_capacity_gw > 0 and hours_in_period > 0) else 0
+peak_gen = df["gen_scaled"].max()
+peak_load = df["load_scaled"].max()
+peak_surplus = df["surplus"].max()
+peak_unmet = df["unmet"].max()
+total_surplus = df["surplus"].sum()
+full_load_hours = (total_gen / (target_capacity_gw * 1e3)) if target_capacity_gw > 0 else 0
+
+with st.expander("📊 Annual Summary", expanded=True):
+    s1, s2, s3, s4 = st.columns(4)
+    s1.metric("Capacity Factor", f"{capacity_factor:.1f} %")
+    s2.metric("Full-Load Hours", f"{full_load_hours:,.0f} h")
+    s3.metric("Total Surplus", f"{total_surplus / 1e6:.2f} TWh")
+    s4.metric("Total Unmet Load", f"{(total_load - total_met) / 1e6:.2f} TWh")
+
+    p1, p2, p3, p4 = st.columns(4)
+    p1.metric("Peak Generation", f"{peak_gen / 1000:.2f} GW")
+    p2.metric("Peak Load", f"{peak_load / 1000:.2f} GW")
+    p3.metric("Peak Surplus", f"{peak_surplus / 1000:.2f} GW")
+    p4.metric("Peak Unmet", f"{peak_unmet / 1000:.2f} GW")
 
 # View selection
 view = st.selectbox("View", ["Year", "Season", "Month", "Day"])
