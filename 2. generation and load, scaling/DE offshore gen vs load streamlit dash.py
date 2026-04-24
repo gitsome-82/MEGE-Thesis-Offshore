@@ -6,6 +6,16 @@ import pathlib
 import plotly.express as px
 import plotly.graph_objects as go
 
+# Check for streamlit and provide instructions if not found
+try:
+    import streamlit as st
+except ImportError:
+    raise ImportError(
+        "Streamlit is not installed in your environment. "
+        "Activate your virtual environment and run:\n"
+        "    pip install -r requirements.txt"
+    )
+
 # Base data directory (relative to this script → works on any machine / Streamlit Cloud)
 DATA_DIR = str(pathlib.Path(__file__).resolve().parent.parent / "DATA" / "Germany Data")
 
@@ -43,9 +53,8 @@ def parse_smard_numeric(series):
 def load_frauenhofer(year):
     path = f"{DATA_DIR}/Frauenhofer data/energy-charts_Public_net_electricity_generation_in_Germany_in_{year} MW.csv"
     df = pd.read_csv(path, skiprows=[1])
-    df["timestamp"] = pd.to_datetime(df["Date (GMT+1)"], format="ISO8601", utc=True)
-    df["timestamp"] = df["timestamp"].dt.strftime("%Y-%m-%d %H:%M:%S")
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    # Parse mixed UTC offsets (+01:00/+02:00) via UTC, convert to German local time, strip tz label
+    df["timestamp"] = pd.to_datetime(df["Date (GMT+1)"], format="ISO8601", utc=True).dt.tz_convert("Europe/Berlin").dt.tz_localize(None)
     df["Wind offshore"] = pd.to_numeric(df["Wind offshore"], errors='coerce')
     df["Load"] = pd.to_numeric(df["Load"], errors='coerce')
     df = df.rename(columns={"Wind offshore": "offshore_mw", "Load": "load_mw"})
@@ -107,8 +116,20 @@ def scale_generation(df, target_capacity_gw, df_cap):
         (int(r["year_num"]), int(r["month_num"])): float(r["Wind offshore"])
         for _, r in df_cap.dropna(subset=["Wind offshore"]).iterrows()
     }
+    sorted_keys = sorted(cap_lookup.keys())
+
+    def get_capacity(k):
+        if k in cap_lookup:
+            return cap_lookup[k]
+        # Fall back to the most recent earlier month in the data
+        earlier = [sk for sk in sorted_keys if sk <= k]
+        if earlier:
+            return cap_lookup[earlier[-1]]
+        # If before all known data, use the earliest known entry
+        return cap_lookup[sorted_keys[0]] if sorted_keys else 9.2
+
     keys = list(zip(df["timestamp"].dt.year, df["timestamp"].dt.month))
-    cap_series = pd.Series([cap_lookup.get(k, 8.35) for k in keys], index=df.index)
+    cap_series = pd.Series([get_capacity(k) for k in keys], index=df.index)
     df["gen_scaled"] = df["generation_mwh"].fillna(0) * (target_capacity_gw / cap_series)
     return df
 
@@ -279,6 +300,10 @@ elif view == "Season":
         winter_label = None
 
     season_name = winter_label if season == "Winter" else season
+
+    # Ensure numeric dtypes survive pd.concat with empty DataFrames (e.g. SMARD Winter 2022 has no Dec 2021 data)
+    season_df["gen_scaled"] = pd.to_numeric(season_df["gen_scaled"], errors="coerce")
+    season_df["load_scaled"] = pd.to_numeric(season_df["load_scaled"], errors="coerce")
 
     # Pie chart
     season_met = season_df["load_met"].sum()

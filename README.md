@@ -1,1 +1,2 @@
 # MEGE-Thesis-Offshore
+ola 🤖🤖🤖🤖
