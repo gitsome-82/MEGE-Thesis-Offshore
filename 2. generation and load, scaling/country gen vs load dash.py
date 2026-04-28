@@ -1,3 +1,5 @@
+# to run: streamlit run "2. generation and load, scaling/country gen vs load dash.py"
+
 import pathlib
 import sys
 
