@@ -3,7 +3,7 @@ import runpy
 
 
 TARGET_APP = (
-    Path(__file__).resolve().parent
+    Path(__file__).resolve().parent.parent
     / "2. generation and load, scaling"
     / "demo DE offshore gen vs load streamlit dash.py"
 )
