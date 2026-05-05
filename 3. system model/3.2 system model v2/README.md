@@ -1,8 +1,8 @@
 # Offshore Wind + H₂ Storage Control Model
 
-**WP5.4 — Economic potential of storage solutions to meet demand fluctuations**
+**Economic potential of storage solutions to meet demand fluctuations**
 
-A short-term storage control model for a hypothetical offshore wind farm at (a scaled Alpha Ventus) coupled
+A short-term storage control model for a hypothetical offshore wind farm at (IN THE FUTURE but not yet: a scaled Alpha Ventus) coupled
 with hydrogen energy storage.  Given hourly wind generation, electricity prices,
 and demand forecasts, the model decides — for every hour of the year — how to
 split the farm's output between **grid export**, **hydrogen production**, and
@@ -10,7 +10,117 @@ split the farm's output between **grid export**, **hydrogen production**, and
 
 ---
 
-## Quick Start
+## Model Equations
+
+All key mathematical relationships used in the model, collected in one place.
+
+### Generation scaling (generation.py)
+
+$$
+P_{\text{farm},t} = P_{\text{national},t} \times \frac{C_{\text{target}}}{C_{\text{installed},t}} \times f_{\text{derate}}
+$$
+
+where $C_{\text{installed},t}$ is the monthly national installed offshore capacity (MW), looked up from Frauenhofer data.
+
+### Electrolyser (hydrogen.py)
+
+$$
+\dot{m}_{\text{H}_2} = \frac{P_{\text{el}} \times 1000}{\eta_{\text{el}}} \quad \left[\frac{\text{kg}}{\text{h}}\right]
+$$
+
+where $\eta_{\text{el}}$ is specific energy consumption [kWh/kg] (default 55 kWh/kg), and $P_{\text{el}}$ is in MW (= MWh/h).
+
+Marginal value of sending 1 MWh to electrolyser vs grid:
+
+$$
+V_{\text{H}_2} = \frac{1000}{\eta_{\text{el}}} \times p_{\text{H}_2} \quad \left[\frac{\text{€}}{\text{MWh}_{\text{elec}}}\right]
+$$
+
+With defaults: $(1000/55) \times 5 = 90.9$ €/MWh → prefer H₂ over grid when spot price < 90.9 €/MWh.
+
+### Fuel cell (hydrogen.py)
+
+$$
+P_{\text{FC,out}} = \dot{m}_{\text{H}_2,\text{in}} \times \frac{\eta_{\text{FC}}}{1000} \quad \text{[MW]}
+$$
+
+where $\eta_{\text{FC}}$ = 16.7 kWh$_{\text{elec}}$/kg$_{\text{H}_2}$ ≈ 50% LHV efficiency  
+(H₂ LHV ≈ 33.3 kWh/kg → $0.5 \times 33.3 \approx 16.65$ kWh/kg).
+
+### Battery (battery.py) — √η split model
+
+Charge leg ($\eta_c = \sqrt{\eta}$):
+
+$$
+E_{\text{stored}} = P_{\text{charge}} \times \sqrt{\eta}
+$$
+
+Discharge leg ($\eta_d = \sqrt{\eta}$):
+
+$$
+P_{\text{out}} = E_{\text{withdrawn}} \times \sqrt{\eta}
+$$
+
+Round-trip efficiency = $\eta_c \times \eta_d = \eta$ (default 0.90).  
+The √η split is the correct symmetric formulation — applying all losses to one leg would bias the solver.
+
+### H₂ tank dynamics (LP constraint)
+
+$$
+\text{SoC}_{\text{H}_2,t} = \text{SoC}_{\text{H}_2,t-1} + \frac{P_{\text{el},t} \times 1000}{\eta_{\text{el}}} - \frac{P_{\text{FC},t} \times 1000}{\eta_{\text{FC}}} - m_{\text{offtake},t}
+$$
+
+### Battery dynamics (LP constraint)
+
+$$
+\text{SoC}_{\text{batt},t} = \text{SoC}_{\text{batt},t-1} + P_{\text{bc},t} \cdot \sqrt{\eta} - \frac{P_{\text{bd},t}}{\sqrt{\eta}}
+$$
+
+### Power balance (LP constraint, every hour)
+
+$$
+\underbrace{P_{\text{grid},t} + P_{\text{el},t} + P_{\text{bc},t} + P_{\text{curtail},t}}_{\text{sinks}} = \underbrace{P_{\text{wind},t} + P_{\text{FC},t} + P_{\text{bd},t}}_{\text{sources}}
+$$
+
+### LP Objective — Revenue mode
+
+$$
+\max \sum_{t=1}^{T} \left[ \pi_t \cdot (P_{\text{grid},t} + P_{\text{FC},t}) + p_{\text{H}_2} \cdot m_{\text{offtake},t} - \lambda (P_{\text{bc},t} + P_{\text{bd},t}) \right]
+$$
+
+where $\pi_t$ = spot price [€/MWh], $p_{\text{H}_2}$ = H₂ offtake price [€/kg], $\lambda$ = battery cycling penalty [€/MWh].
+
+### LP Objective — H₂ mode
+
+$$
+\max \sum_{t=1}^{T} \left[ \frac{1000}{\eta_{\text{el}}} \cdot P_{\text{el},t} - \frac{1000}{\eta_{\text{FC}}} \cdot P_{\text{FC},t} \right]
+$$
+
+(Maximise net H₂ produced; tiny grid tiebreaker term omitted here for clarity.)
+
+### Economics (economics.py)
+
+$$
+R_{\text{grid},t} = P_{\text{grid},t} \times \pi_t \qquad
+R_{\text{H}_2,t} = m_{\text{offtake},t} \times p_{\text{H}_2}
+$$
+
+$$
+\text{Profit}_t = R_{\text{grid},t} + R_{\text{H}_2,t} - P_{\text{wind},t} \times c_{\text{opex}}
+$$
+
+### NPV — annuity present value (economics.py)
+
+$$
+\text{PV} = \sum_{n=1}^{N} \frac{\text{Profit}_{\text{annual}}}{(1+r)^n} = \text{Profit}_{\text{annual}} \times \frac{1-(1+r)^{-N}}{r}
+$$
+
+where $r$ = discount rate (default 8%), $N$ = project lifetime (default 25 years).  
+**Note:** CAPEX not yet included — this is operating profit PV only.
+
+---
+
+
 
 ```bash
 # From the "3. system model/" directory:
@@ -44,16 +154,17 @@ The CLI run prints an annual summary and saves an hourly CSV to `outputs/`.
 │   │
 │   ├── models/
 │   │   ├── generation.py          ← Scales national output → target farm
-│   │   ├── hydrogen.py            ← Electrolyser + H₂ tank state objects
-│   │   ├── battery.py             ← Battery storage (placeholder)
-│   │   ├── dispatch.py            ← THE BRAIN — hourly decision engine
+│   │   ├── hydrogen.py            ← Electrolyser, H₂ tank, FuelCell models
+│   │   ├── battery.py             ← Battery storage (√η split model)
+│   │   ├── dispatch.py            ← Rule-based hourly decision engine (V1)
+│   │   ├── dispatch_optimised.py  ← LP-optimised day-ahead dispatch (V2)
 │   │   └── economics.py           ← Revenue, profit, NPV calculations
 │   │
 │   ├── scenarios/
+│   │   ├── config.py              ← All parameters in a single dataclass
 │   │   └── run_scenario.py        ← "Mother" script — wires everything
 │   │
 │   └── utils/
-│       └── config.py              ← All parameters in a single dataclass
 │
 ├── data/                          ← raw/ and processed/ folders
 ├── outputs/                       ← Scenario CSV exports
@@ -203,6 +314,19 @@ The electrolyser is modelled as a simple PEM unit with three characteristics:
 - No compressor energy — going into the tank is "free" (in reality, compression
   to high-pressure storage takes ~5–10% of the energy)
 
+#### Fuel cell model (`hydrogen.py`)
+
+A simple PEM fuel cell that converts stored H₂ back into electricity.
+Modelled as a fixed electrical efficiency:
+
+- **Capacity** (default 0 MW, i.e. disabled): maximum electrical output
+- **Efficiency** (default 16.7 kWh_elec/kg_H₂): corresponds to ~50% LHV efficiency
+  (H₂ LHV ≈ 33.3 kWh/kg → 50% × 33.3 = 16.65 kWh/kg)
+- **Minimum load** (default 10%): below this the cell is off
+
+Enable via `ScenarioConfig(fuel_cell_capacity_mw=20.0)`.  The fuel cell is only
+useful with the optimised dispatch (V2) — the rule-based dispatch does not use it.
+
 #### H₂ tank and discharge rule
 
 The hydrogen tank is a simple state-of-charge model: it has a maximum capacity
@@ -236,6 +360,106 @@ production is ~1,818 kg/hour.  A 10,000 kg tank with 2,000 kg/day offtake
 (83.3 kg/hr) will tend to fill up and stay near full, since production rate
 far exceeds withdrawal.  To see more dynamic cycling, either increase the daily
 offtake, decrease the electrolyser size, or increase the tank capacity.
+
+### Step 3b — LP-Optimised Dispatch (`dispatch_optimised.py`)
+
+An alternative dispatch engine that replaces the rule-based logic with a
+**linear programme (LP)** solved over a rolling 24-hour horizon.
+
+#### How it works
+
+Instead of making decisions one hour at a time, the optimiser sees the full
+24-hour price and wind forecast upfront and finds the single best strategy
+across all hours simultaneously.
+
+For each 24-hour window it chooses **9 numbers per hour** (216 variables total):
+
+| Variable | Meaning |
+|---|---|
+| `p_grid` | MW exported to grid |
+| `p_el` | MW consumed by electrolyser |
+| `p_fc` | MW generated by fuel cell (burns stored H₂) |
+| `p_bc` | MW charging the battery |
+| `p_bd` | MW discharging the battery |
+| `soc_h2` | H₂ tank level at end of hour |
+| `soc_batt` | Battery level at end of hour |
+| `curtail` | MW curtailed / wasted |
+| `h2_offtake` | kg H₂ sold this hour |
+
+Subject to three hard physical constraints every hour:
+
+1. **Power balance** — everything generated must go somewhere:
+   `p_grid + p_el + p_bc + curtail = wind_gen + p_fc + p_bd`
+2. **H₂ tank dynamics** — mass balance in the tank each hour
+3. **Battery dynamics** — energy balance in the battery each hour
+
+Plus capacity bounds (can't exceed rated MW, can't overfill tanks, etc.).
+
+#### Two objectives
+
+**`"revenue"` (default) — maximise profit:**
+Maximise `Σ [price × p_grid + h2_price × h2_offtake − λ × (p_bc + p_bd)]`
+
+The LP naturally learns to charge/electrolyse at 3am when prices are low, and
+sell/discharge at 6pm when prices spike.  No fixed rules needed.
+`λ` is the battery cycling penalty (default 1 €/MWh) to prevent unrealistic
+churning.
+
+**`"h2"` — maximise green H₂ volume:**
+Maximise `Σ [el_rate × p_el − fc_rate × p_fc]`
+
+Useful when you have a fixed industrial H₂ delivery contract and volume is what
+matters, not price arbitrage.  The electrolyser runs as hard as wind and tank
+allow.
+
+#### Solver — swap point
+
+The actual solving is isolated in one function `_solve_lp()`.  By default it
+uses **scipy's HiGHS** solver (open-source, fast, ships with scipy — no extra
+install needed).  A full-year run (8,760 hours, solved as 365 × 24-h windows)
+takes a few seconds.
+
+When a more powerful solver is available (e.g. Gurobi with an academic licence),
+only `_solve_lp()` needs to change — everything else stays the same.  The comment
+block in the code is labelled **SWAP POINT** for exactly this purpose.
+
+#### Battery cycling penalty (√η model)
+
+Battery round-trip efficiency is split across the charge and discharge legs:
+
+```
+energy_stored = power_in  × √η      (charge-leg loss)
+power_out     = energy_out × √η     (discharge-leg loss)
+```
+
+This is the correct formulation — it makes charge and discharge symmetric and
+avoids artefacts that arise from applying all losses to one leg.
+
+#### Enabling the optimised dispatch
+
+In `config.py` / the Streamlit sidebar:
+
+```python
+cfg = ScenarioConfig(
+    use_optimised_dispatch=True,
+    dispatch_objective="revenue",    # or "h2"
+    dispatch_horizon_hours=24,       # 168 for weekly lookahead
+    fuel_cell_capacity_mw=20.0,      # 0 = fuel cell disabled
+)
+```
+
+`run_scenario.py` automatically routes through the optimiser when
+`use_optimised_dispatch=True`.
+
+#### Visualisation
+
+`plot_optimised_dispatch(df, day="YYYY-MM-DD")` produces a 4-panel figure:
+- Panel 1: H₂ Tank State of Charge
+- Panel 2: Power flows (wind, grid, electrolyser, fuel cell, battery, curtailment)
+- Panel 3: Electricity price with mean dashed line
+- Panel 4: Cumulative revenue [k€]
+
+Inspired by the [RTC-Tools BESS scheduling demo](https://portfolioenergy-bess-demo.readthedocs.io/en/latest/scheduling.html).
 
 ### Step 4 — Economics (`economics.py`)
 
@@ -286,8 +510,7 @@ the buyer withdraws.  Most generation goes to the grid.
 
 ## Hourly Output Table
 
-The model produces one row per hour with columns matching the supervisor's
-requested format:
+The model produces one row per hour with columns matching Ricardo's xcel sheet format:
 
 | Column | Unit | Description |
 |---|---|---|
@@ -309,6 +532,8 @@ requested format:
 | `total_revenue_eur` | EUR | Sum of all revenue |
 | `opex_eur` | EUR | Operating cost |
 | `profit_eur` | EUR | Revenue minus opex |
+| `fc_power_mwh` | MWh | Fuel cell electrical output *(optimised dispatch only)* |
+| `fc_h2_consumed_kg` | kg | H₂ consumed by fuel cell *(optimised dispatch only)* |
 
 ---
 
@@ -386,11 +611,15 @@ custom config.
 
 ## Future Work
 
-- [ ] Electrolyser ramp constraints and degradation
+- [ ] Electrolyser ramp constraints and degradation over life
 - [ ] Price-responsive H₂ discharge (sell H₂ when electricity price is high)
-- [ ] CAPEX model (LCOE, LCOH, IRR)
+- [ ] CAPEX model (LCOE, LCOH, IRR). LCOE could include CAPEX and decomissioning?
 - [ ] Battery dispatch integration
+- [ ] Battery passive discharge, cycle life degradation
 - [ ] Ancillary services revenue
 - [ ] Multiple site comparison (East Anglia, UK)
 - [ ] Containerisation for deployment
 - [ ] Sensitivity / scenario sweep tools
+- [ ] Maintenence / downtime 
+- [ ] Confirm no situation where the BESS is being charged and the remainder is being curtailed where the remainder could be producing H2.
+- [ ] different operational strategies and see how it affects NPV/LCOH e.g. discharge battery every evening at peak house regardless of price, or playing around with rules for discharging when price is above a seasonal average.

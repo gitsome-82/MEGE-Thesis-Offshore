@@ -5,7 +5,7 @@ Takes the hourly dispatch results DataFrame and computes financial outputs.
 """
 import numpy as np
 import pandas as pd
-from src.utils.config import ScenarioConfig
+from src.scenarios.config import ScenarioConfig
 
 
 def compute_hourly_economics(

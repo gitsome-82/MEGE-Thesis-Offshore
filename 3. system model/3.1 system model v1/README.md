@@ -1,6 +1,6 @@
 # Offshore Wind + H₂ Storage Control Model
 
-**WP5.4 — Economic potential of storage solutions to meet demand fluctuations**
+**Economic potential of storage solutions to meet demand fluctuations**
 
 A short-term storage control model for a hypothetical offshore wind farm at (a scaled Alpha Ventus) coupled
 with hydrogen energy storage.  Given hourly wind generation, electricity prices,

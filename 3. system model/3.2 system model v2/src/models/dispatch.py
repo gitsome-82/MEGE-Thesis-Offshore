@@ -1,7 +1,7 @@
 """
 dispatch.py — Hourly storage-control / dispatch engine.
 
-This is the heart of WP5.4.  For each timestep it decides how to split
+Model brain. For each timestep it decides how to split
 the available generation between:
     • grid export
     • electrolyser (H2 production)
@@ -18,7 +18,7 @@ import pandas as pd
 
 from src.models.hydrogen import Electrolyser, HydrogenTank
 from src.models.battery import Battery
-from src.utils.config import ScenarioConfig
+from src.scenarios.config import ScenarioConfig
 
 
 def run_dispatch(

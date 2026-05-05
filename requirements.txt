@@ -1,3 +1,9 @@
 streamlit
 pandas
 plotly
+folium
+streamlit-folium
+openmeteo-requests
+requests-cache
+retry-requests
+numpy

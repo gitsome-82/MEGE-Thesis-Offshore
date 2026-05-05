@@ -1,0 +1,27 @@
+{
+    // VS Code debug configuration for 2.5 model runners
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run HESS",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/2.5. cisco's model/HESS/run_hess.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Run BESS",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/2.5. cisco's model/BESS/run_bess.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Run HybESS",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/2.5. cisco's model/HybESS/run_hybess.py",
+            "console": "integratedTerminal"
+        }
+    ]
+}
