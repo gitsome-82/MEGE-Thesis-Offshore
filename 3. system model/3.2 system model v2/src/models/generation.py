@@ -115,6 +115,51 @@ def extrapolate_wind_speed(
 # Power-curve pathway
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _load_v164_curve() -> tuple:
+    """
+    Load Vestas V164/8000 power curve from windpowerlib's verified turbine
+    database.  Returns (v_array, cf_array) with CF clipped to [0, 1].
+
+    windpowerlib uses the V164/8000 (8.0 MW) variant — the closest available
+    to WFA's 8.4 MW turbines.  CF is normalised to rated power so the shape
+    is correct regardless of the 5% capacity difference.
+    """
+    try:
+        from windpowerlib import WindTurbine
+        t = WindTurbine(turbine_type='V164/8000', hub_height=110)
+        pc = t.power_curve
+        v_arr = pc['wind_speed'].values.astype(float)
+        cf_arr = (pc['value'].values / t.nominal_power).clip(0.0, 1.0)
+        # Append explicit cut-out: power drops to 0 just above 25 m/s
+        v_arr = np.append(v_arr, [25.01])
+        cf_arr = np.append(cf_arr, [0.0])
+        return v_arr, cf_arr
+    except Exception as e:
+        raise ImportError(
+            f"windpowerlib is required for power_curve_v164(). "
+            f"Install it with: pip install windpowerlib\n({e})"
+        )
+
+
+_V164_CURVE = None   # lazy-loaded on first call
+
+
+def power_curve_v164(wind_speed_ms: np.ndarray) -> np.ndarray:
+    """
+    Vestas V164/8000 power curve from windpowerlib's verified turbine database.
+    Returns capacity factor [0, 1].
+
+    Source: windpowerlib open-source turbine library (oedb / Vestas datasheet).
+    Turbine: V164/8000, 8.0 MW rated, hub height 110 m.
+    WFA turbines are 8.4 MW; CF shape is identical, only absolute power scales.
+    """
+    global _V164_CURVE
+    if _V164_CURVE is None:
+        _V164_CURVE = _load_v164_curve()
+    v = np.asarray(wind_speed_ms, dtype=float)
+    return np.interp(v, _V164_CURVE[0], _V164_CURVE[1], left=0.0, right=0.0)
+
+
 def power_curve_parametric(
     wind_speed_ms: np.ndarray,
     cut_in_ms: float = 3.0,

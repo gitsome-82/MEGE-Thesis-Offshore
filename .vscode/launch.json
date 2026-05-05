@@ -22,6 +22,25 @@
             "request": "launch",
             "program": "${workspaceFolder}/2.5. cisco's model/HybESS/run_hybess.py",
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "${fileDirname}"
+        },
+        {
+            "name": "Run scenario (3.2 model)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/3. system model/3.2 system model v2/src/scenarios/run_scenario.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/3. system model/3.2 system model v2",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/3. system model/3.2 system model v2"
+            }
         }
     ]
 }

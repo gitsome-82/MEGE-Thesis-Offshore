@@ -328,6 +328,16 @@ def run_dispatch_optimised(
         gen    = window["gen_scaled_mwh"].to_numpy(dtype=float)
         price  = window["price_eur_per_mwh"].to_numpy(dtype=float)
 
+        # Sanitise: replace NaN / inf prices with the window median so the
+        # LP cost vector stays finite.  SMARD Germany has occasional gaps.
+        bad = ~np.isfinite(price)
+        if bad.any():
+            fallback = float(np.nanmedian(price)) if not bad.all() else 50.0
+            price = np.where(bad, fallback, price)
+
+        # Sanitise gen too (shouldn't happen but guard anyway)
+        gen = np.where(np.isfinite(gen), gen, 0.0)
+
         # Build and solve LP
         c, A_eq, b_eq, bounds = _build_lp(
             gen=gen, price=price, cfg=cfg,

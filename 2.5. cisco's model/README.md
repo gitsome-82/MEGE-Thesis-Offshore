@@ -75,7 +75,6 @@ If no price files are found, a flat **50 €/MWh** price is used with a warning.
 2.5. cisco's model/
 ├── README.md
 ├── common/
-│   ├── generation.py      ← Vestas V164-8.4 MW power curve (kept for reference)
 │   └── loaders.py         ← Wind + price data loading (ENTSO-E sources), 25-yr tiling
 ├── HESS/
 │   ├── config.py          ← HESSConfig dataclass (Table 6.1 parameters)

@@ -71,10 +71,39 @@ class ScenarioConfig:
                                                       # Used as the curtailment floor: if spot price
                                                       # is below this, selling to grid loses money.
 
-    # --- Data source ---
-    country: str = "Germany"                          # "Germany" or "Portugal"
-    data_source: str = "SMARD"                        # "SMARD" or "Frauenhofer" (Germany); "ENTSO-E" (Portugal)
+    # --- Project / Data source ---
+    # wf_project drives country, data_source and site metadata automatically.
+    # Options: "Germany - Alpha Ventus (North Sea)"
+    #          "Portugal - WindFloat Atlantic (Atlantic)"
+    #          "England - East Anglia (North Sea)"
+    wf_project: str = "Germany - Alpha Ventus (North Sea)"
+    country: str = "Germany"                          # derived from wf_project in run_scenario
+    data_source: str = "SMARD"                        # "SMARD" or "Frauenhofer" (Germany); "ENTSO-E" (Portugal/England)
     year: int = 2023
+
+    # --- Storage type ---
+    # "hydrogen" | "battery" | "hybrid"
+    # "battery" and "hybrid" are placeholders — dispatch not yet implemented.
+    storage_type: str = "hydrogen"
+
+    # --- Storage system size as % of OWF capacity ---
+    # Used to auto-size electrolyser (H2) and/or battery.
+    # Options: 5, 10, 20, 30, 50  (percent)
+    storage_size_pct: float = 20.0
+
+    # --- Objective ---
+    # "max_profit" | "max_h2" | "max_energy_stor"
+    # "max_energy_stor" is a placeholder — not yet optimised.
+    objective: str = "max_profit"
+
+    # --- Ancillary Grid Services ---
+    # Placeholder — revenue model not yet implemented.
+    ancillary_services: bool = False
+
+    # --- Wind scenario ---
+    # "ncep" (reference) | "low_wind" | "high_wind"
+    # Placeholder — scenario scaling not yet implemented.
+    wind_scenario: str = "ncep"
 
     # --- Fuel cell (PEM, converts stored H₂ back to electricity) ---
     fuel_cell_capacity_mw: float = 0.0               # max electrical output [MW]; 0 = disabled
